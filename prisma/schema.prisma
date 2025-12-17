@@ -1,0 +1,284 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ATHLETE
+  COACH
+  ADMIN
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum CoachCategory {
+  SPORTS_COACH
+  FITNESS_TRAINER
+  PHYSICAL_THERAPY
+  REHABILITATION
+  NUTRITION
+  MENTAL_COACH
+  YOGA_PILATES
+  STRENGTH_CONDITIONING
+  CARDIO_ENDURANCE
+  MARTIAL_ARTS
+  OTHER
+}
+
+enum PricingModel {
+  HOURLY
+  PER_SESSION
+  PACKAGE
+  MONTHLY
+}
+
+enum VerificationStatus {
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String
+  role          UserRole
+  image         String?
+  phone         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  coachProfile    CoachProfile?
+  athleteProfile  AthleteProfile?
+  bookingsAsCoach Booking[]       @relation("CoachBookings")
+  bookingsAsAthlete Booking[]     @relation("AthleteBookings")
+  reviewsGiven    Review[]        @relation("ReviewsGiven")
+  reviewsReceived Review[]        @relation("ReviewsReceived")
+  sentMessages    Message[]       @relation("SentMessages")
+  receivedMessages Message[]      @relation("ReceivedMessages")
+  conversations   ConversationParticipant[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model CoachProfile {
+  id                String              @id @default(cuid())
+  userId            String              @unique
+  user              User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Professional Info
+  bio               String?
+  title             String?
+  yearsOfExperience Int?
+  categories        CoachCategory[]
+  specialties       String[]
+
+  // Location (for in-person sessions)
+  city              String?
+  state             String?
+  country           String?
+  address           String?
+  latitude          Float?
+  longitude         Float?
+  serviceRadius     Int?              // in miles/km
+
+  // Pricing
+  pricingModel      PricingModel      @default(HOURLY)
+  hourlyRate        Float?
+  sessionRate       Float?
+  packageDetails    String?           // JSON string for package info
+
+  // Credentials & Verification
+  certifications    Certification[]
+  verificationStatus VerificationStatus @default(PENDING)
+  verifiedAt        DateTime?
+
+  // Availability
+  availability      Availability[]
+
+  // Stats
+  averageRating     Float             @default(0)
+  totalReviews      Int               @default(0)
+  totalSessions     Int               @default(0)
+
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@index([verificationStatus])
+  @@index([city, state])
+  @@index([averageRating])
+}
+
+model AthleteProfile {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Basic Info
+  bio         String?
+  goals       String[]
+  interests   CoachCategory[]
+
+  // Location
+  city        String?
+  state       String?
+  country     String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Certification {
+  id              String          @id @default(cuid())
+  coachProfileId  String
+  coachProfile    CoachProfile    @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+
+  name            String
+  issuingOrg      String
+  issueDate       DateTime
+  expiryDate      DateTime?
+  credentialId    String?
+  documentUrl     String?         // Uploaded proof
+
+  verified        Boolean         @default(false)
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  @@index([coachProfileId])
+}
+
+model Availability {
+  id              String        @id @default(cuid())
+  coachProfileId  String
+  coachProfile    CoachProfile  @relation(fields: [coachProfileId], references: [id], onDelete: Cascade)
+
+  dayOfWeek       Int           // 0-6 (Sunday-Saturday)
+  startTime       String        // "09:00"
+  endTime         String        // "17:00"
+
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([coachProfileId])
+}
+
+model Booking {
+  id          String        @id @default(cuid())
+
+  // Participants
+  coachId     String
+  coach       User          @relation("CoachBookings", fields: [coachId], references: [id])
+  athleteId   String
+  athlete     User          @relation("AthleteBookings", fields: [athleteId], references: [id])
+
+  // Booking Details
+  startTime   DateTime
+  endTime     DateTime
+  status      BookingStatus @default(PENDING)
+
+  // Location
+  location    String        // Address for in-person session
+  notes       String?
+
+  // Pricing
+  totalPrice  Float
+
+  // Payment
+  paymentIntentId String?   // Stripe payment intent ID
+  paid        Boolean       @default(false)
+
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  // Relations
+  review      Review?
+
+  @@index([coachId])
+  @@index([athleteId])
+  @@index([startTime])
+  @@index([status])
+}
+
+model Review {
+  id          String   @id @default(cuid())
+
+  bookingId   String   @unique
+  booking     Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  // Reviewer (athlete) and Reviewee (coach)
+  reviewerId  String
+  reviewer    User     @relation("ReviewsGiven", fields: [reviewerId], references: [id])
+  revieweeId  String
+  reviewee    User     @relation("ReviewsReceived", fields: [revieweeId], references: [id])
+
+  rating      Int      // 1-5 stars
+  comment     String?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([revieweeId])
+  @@index([rating])
+}
+
+model Conversation {
+  id            String                    @id @default(cuid())
+  participants  ConversationParticipant[]
+  messages      Message[]
+
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+
+  @@index([updatedAt])
+}
+
+model ConversationParticipant {
+  id              String       @id @default(cuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  lastReadAt      DateTime?
+
+  createdAt       DateTime     @default(now())
+
+  @@unique([conversationId, userId])
+  @@index([userId])
+}
+
+model Message {
+  id              String       @id @default(cuid())
+  conversationId  String
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  senderId        String
+  sender          User         @relation("SentMessages", fields: [senderId], references: [id])
+  receiverId      String
+  receiver        User         @relation("ReceivedMessages", fields: [receiverId], references: [id])
+
+  content         String
+  read            Boolean      @default(false)
+
+  createdAt       DateTime     @default(now())
+
+  @@index([conversationId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([createdAt])
+}
