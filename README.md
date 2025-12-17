@@ -1,1 +1,1 @@
-# Coaching-app
+# coaching-app
