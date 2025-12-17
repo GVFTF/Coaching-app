@@ -59,9 +59,17 @@ export default function SearchPage() {
 
       const response = await fetch(`/api/coaches?${params.toString()}`)
       const data = await response.json()
-      setCoaches(data)
+
+      // Only set coaches if data is an array
+      if (Array.isArray(data)) {
+        setCoaches(data)
+      } else {
+        console.error('API returned non-array data:', data)
+        setCoaches([])
+      }
     } catch (error) {
       console.error('Failed to fetch coaches:', error)
+      setCoaches([])
     } finally {
       setIsLoading(false)
     }
